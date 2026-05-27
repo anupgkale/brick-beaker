@@ -281,36 +281,6 @@
       text-align: center;
     }
 
-    /* ---- Laser fire button (mobile) ---- */
-    #fire-btn {
-      position: absolute;
-      bottom: 16px;
-      right: 16px;
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      border: 2px solid #00ff44;
-      background: rgba(0, 255, 68, 0.1);
-      color: #00ff44;
-      font-size: 20px;
-      font-weight: bold;
-      font-family: 'Courier New', monospace;
-      text-shadow: 0 0 10px rgba(0, 255, 68, 0.5);
-      box-shadow: 0 0 20px rgba(0, 255, 68, 0.2);
-      z-index: 5;
-      cursor: pointer;
-      touch-action: manipulation;
-      display: none;
-      align-items: center;
-      justify-content: center;
-    }
-    #fire-btn:active {
-      background: rgba(0, 255, 68, 0.4);
-    }
-    #fire-btn.visible {
-      display: flex;
-    }
-
     /* ---- Responsive ---- */
     @media (max-width: 840px) {
       #game-wrapper {
@@ -402,8 +372,6 @@
       <div id="leaderboard-go" class="leaderboard"></div>
     </div>
 
-    <!-- Mobile Laser Fire Button -->
-    <button id="fire-btn">L</button>
   </div>
 </div>
 
@@ -456,7 +424,6 @@ const goScore     = $('go-final-score');
 const goLevel     = $('go-level');
 const lbStart     = $('leaderboard-start');
 const lbGo        = $('leaderboard-go');
-const fireBtn     = $('fire-btn');
 
 // ============================================================
 //  GAME STATE
@@ -754,16 +721,27 @@ function spawnParticles(x, y, color, count) {
 // ============================================================
 function fireLaser() {
   const pad = S.paddle;
+  const offset = pad.w * 0.32;
+  // Left beam
   S.lasers.push({
-    x: pad.x,
+    x: pad.x - offset,
     y: pad.y - pad.h / 2,
     w: 4,
     h: 16,
     vy: -CFG.LASER_SPEED,
     alive: true,
   });
-  // small fire particle effect
-  spawnParticles(pad.x, pad.y - pad.h / 2, '#00ff44', 5);
+  // Right beam
+  S.lasers.push({
+    x: pad.x + offset,
+    y: pad.y - pad.h / 2,
+    w: 4,
+    h: 16,
+    vy: -CFG.LASER_SPEED,
+    alive: true,
+  });
+  spawnParticles(pad.x - offset, pad.y - pad.h / 2, '#00ff44', 3);
+  spawnParticles(pad.x + offset, pad.y - pad.h / 2, '#00ff44', 3);
 }
 
 // ============================================================
@@ -806,7 +784,6 @@ function loadLevel(level) {
   S.particles = [];
   S.lasers = [];
   S.powerupsActive = {};
-  fireBtn.classList.remove('visible');
   previousBallPositions = [];
 
   resetBall();
@@ -869,12 +846,8 @@ document.addEventListener('keydown', (e) => {
   }
   if (k === ' ' || k === 'Space') {
     e.preventDefault();
-    if (S.state === 'playing') {
-      if (S.ball.stuck) { launchBall(); }
-      else if (S.powerupsActive.laser && S.laserCooldown <= 0) {
-        fireLaser();
-        S.laserCooldown = CFG.LASER_COOLDOWN;
-      }
+    if (S.state === 'playing' && S.ball.stuck) {
+      launchBall();
     }
   }
 });
@@ -935,23 +908,6 @@ canvas.addEventListener('touchend', (e) => {
   S.touchX = -1;
 }, { passive: false });
 
-// --- Fire button (for mobile) ---
-fireBtn.addEventListener('touchstart', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  if (S.state === 'playing' && S.powerupsActive.laser && S.laserCooldown <= 0) {
-    fireLaser();
-    S.laserCooldown = CFG.LASER_COOLDOWN;
-  }
-}, { passive: false });
-fireBtn.addEventListener('mousedown', (e) => {
-  e.preventDefault();
-  if (S.state === 'playing' && S.powerupsActive.laser && S.laserCooldown <= 0) {
-    fireLaser();
-    S.laserCooldown = CFG.LASER_COOLDOWN;
-  }
-});
-
 // --- Start / Restart buttons ---
 startBtn.addEventListener('click', startGame);
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
@@ -988,7 +944,6 @@ function startGame() {
   S.lasers = [];
   S.powerups = [];
   S.particles = [];
-  fireBtn.classList.remove('visible');
   previousBallPositions = [];
 
   startOverlay.classList.add('hidden');
@@ -1021,7 +976,6 @@ function restartGame() {
   S.lasers = [];
   S.powerups = [];
   S.particles = [];
-  fireBtn.classList.remove('visible');
   previousBallPositions = [];
   S.score = 0;
   S.lives = CFG.MAX_LIVES;
@@ -1107,7 +1061,6 @@ function updateBall(dt) {
     // clear all powerups on life loss
     S.powerupsActive = {};
     S.lasers = [];
-    fireBtn.classList.remove('visible');
     // some particle effect
     spawnParticles(b.x, CFG.H - 20, '#ff3377', 20);
     return;
@@ -1267,9 +1220,6 @@ function updatePowerups(dt) {
         if (type.id === 'fast' || type.id === 'slow') {
           // ball speed reverts naturally via updateBall
         }
-        if (type.id === 'laser') {
-          fireBtn.classList.remove('visible');
-        }
         // extralife is permanent, no revert needed
       }
     }
@@ -1295,8 +1245,6 @@ function applyPowerup(id) {
     case 'slow':
       // speed reduction handled in updateBall
       break;
-    case 'laser':
-      fireBtn.classList.add('visible');
       break;
     case 'extralife':
       S.lives = Math.min(S.lives + 1, CFG.MAX_LIVES);
@@ -1543,16 +1491,15 @@ function render() {
     ctx.fillText(hint, CFG.W / 2, CFG.H - 60);
   }
 
-  // --- Laser active hint ---
+  // --- Laser active indicator ---
   if (S.state === 'playing' && S.powerupsActive.laser && !ball.stuck) {
-    ctx.fillStyle = 'rgba(0, 255, 68, 0.5)';
+    ctx.fillStyle = 'rgba(0, 255, 68, 0.35)';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.font = 'bold 13px "Courier New", monospace';
+    ctx.font = '12px "Courier New", monospace';
     ctx.shadowColor = '#00ff44';
-    ctx.shadowBlur = 10;
-    const hint = S.isMobile ? 'FIRE button ready!' : 'SPACE to fire laser!';
-    ctx.fillText('\u25B2 ' + hint, CFG.W / 2, CFG.H - 80);
+    ctx.shadowBlur = 8;
+    ctx.fillText('\u26A1 LASER ACTIVE', CFG.W / 2, CFG.H - 80);
     ctx.shadowBlur = 0;
   }
 
@@ -1586,6 +1533,12 @@ function gameLoop(timestamp) {
 
   // Laser cooldown
   if (S.laserCooldown > 0) S.laserCooldown -= dt * 1000;
+
+  // Auto-fire laser when power-up is active
+  if (S.powerupsActive.laser && S.laserCooldown <= 0) {
+    fireLaser();
+    S.laserCooldown = CFG.LASER_COOLDOWN;
+  }
 
   // Update
   updatePaddle(dt);
