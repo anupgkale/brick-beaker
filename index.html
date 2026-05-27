@@ -345,11 +345,13 @@
       </span>
     </div>
     <div class="hud-group">
+      <span id="powerup-bar"></span>
+    </div>
+    <div class="hud-group">
       <span class="hud-item">
         <span class="hud-label">Lives:</span>
-        <span id="hud-lives" class="hud-value lives-val">&#x2764;&#x2764;&#x2764;&#x2764;&#x2764;</span>
+        <span id="hud-lives" class="hud-value lives-val"></span>
       </span>
-      <span id="powerup-bar"></span>
     </div>
   </div>
 
@@ -409,6 +411,8 @@ const CFG = {
   SIDE_MARGIN: 40,
   MAX_LEVEL: 300,
   MAX_LIVES: 5,
+  START_LIVES: 3,
+  START_SCORE: 0,
   LASER_SPEED: 600,
   LASER_COOLDOWN: 350,
   PARTICLE_COUNT: 14,
@@ -443,7 +447,7 @@ const S = {
   playerName: '',
   score: 0,
   level: 0,
-  lives: CFG.MAX_LIVES,
+  lives: CFG.START_LIVES,
   // paddle
   paddle: { x: 0, y: 0, w: CFG.PADDLE_W, h: CFG.PADDLE_H },
   // ball(s)
@@ -684,20 +688,20 @@ function getBrickRect(brick, rows, cols) {
 //  POWER-UP DEFINITIONS
 // ============================================================
 const POWERUP_TYPES = [
-  { id: 'laser',   label: 'L',  color: '#00ff44', border: '#00ff44', desc: 'Laser' },
-  { id: 'long',    label: 'Lg', color: '#4488ff', border: '#4488ff', desc: 'Long Paddle' },
+  { id: 'laser',   label: '🔫',  color: '#00ff44', border: '#00ff44', desc: 'Laser' },
+  { id: 'long',    label: 'L', color: '#4488ff', border: '#4488ff', desc: 'Long Paddle' },
   { id: 'short',   label: 'S',  color: '#ff8800', border: '#ff8800', desc: 'Short Paddle' },
-  { id: 'fast',    label: 'F',  color: '#ff2244', border: '#ff2244', desc: 'Fast Ball' },
-  { id: 'slow',    label: 'Sl', color: '#00ddff', border: '#00ddff', desc: 'Slow Ball' },
-  { id: 'extralife', label: '+1', color: '#ff0066', border: '#ff0066', desc: 'Extra Life' },
+  { id: 'fast',    label: '💨',  color: '#ff2244', border: '#ff2244', desc: 'Fast Ball' },
+  { id: 'slow',    label: '🐌', color: '#00ddff', border: '#00ddff', desc: 'Slow Ball' },
+  { id: 'extralife', label: '❤️', color: '#ff0066', border: '#ff0066', desc: 'Extra Life' },
   { id: 'multishot', label: 'x3', color: '#cc44ff', border: '#cc44ff', desc: 'Multi Ball' },
+  { id: 'bigball', label: '🔵', color: '#ffaa00', border: '#ffaa00', desc: 'Big Ball' },
 ];
 
-// Weights for random power-up selection (extralife ~7% of drops)
+// Weights for random power-up selection
 const POWERUP_WEIGHTS = {
-  laser: 0.10, long: 0.10, short: 0.15, fast: 0.15, slow: 0.15,
-  extralife: 0.5,
-  multishot: 0.10,
+  laser: 0.10, long: 0.10, short: 0.20, fast: 0.10, slow: 0.20,
+  extralife: 0.05, multishot: 0.10, bigball: 0.10,
 };
 
 function spawnPowerup(x, y) {
@@ -774,6 +778,7 @@ function resetBall() {
   b.y = S.paddle.y - S.paddle.h / 2 - b.r;
   b.vx = 0;
   b.vy = 0;
+  b.r = CFG.BALL_RADIUS;
   b.stuck = true;
 }
 
@@ -795,15 +800,21 @@ function spawnExtraBalls() {
     const spread = i === 0 ? -0.4 : 0.4;
     const vx = src.vx + Math.cos(Math.atan2(src.vy, src.vx) + spread) * 60;
     const vy = src.vy + Math.sin(Math.atan2(src.vy, src.vx) + spread) * 60;
+    const r = S.powerupsActive.bigball ? CFG.BALL_RADIUS * 2.5 : CFG.BALL_RADIUS;
     S.extraBalls.push({
       x: src.x, y: src.y,
-      r: CFG.BALL_RADIUS,
+      r,
       vx, vy,
       speed: src.speed,
       stuck: false,
       alive: true,
     });
   }
+}
+
+function setAllBallRadii(radius) {
+  S.ball.r = radius;
+  for (const eb of S.extraBalls) eb.r = radius;
 }
 
 function loadLevel(level) {
@@ -989,12 +1000,9 @@ function startGame() {
     return;
   }
   S.playerName = name;
-  S.score = 0;
-  S.lives = CFG.MAX_LIVES;
+  S.score = CFG.START_SCORE;
+  S.lives = CFG.START_LIVES;
   S.powerupsActive = {};
-  S.lasers = [];
-  S.powerups = [];
-  S.particles = [];
 
   startOverlay.classList.add('hidden');
   goOverlay.classList.add('hidden');
@@ -1026,8 +1034,8 @@ function restartGame() {
   S.lasers = [];
   S.powerups = [];
   S.particles = [];
-  S.score = 0;
-  S.lives = CFG.MAX_LIVES;
+  S.score = CFG.START_SCORE;
+  S.lives = CFG.START_LIVES;
   S.mouseX = -1;
   S.touchX = -1;
   loadLevel(1);
@@ -1162,9 +1170,23 @@ function loseLife(ball) {
   spawnParticles(ball.x, CFG.H - 20, '#ff3377', 20);
 }
 
+function destroyBrickAtIndex(idx) {
+  const brick = S.bricks[idx];
+  const rows = S._brickRows || 0;
+  const cols = S._brickCols || 0;
+  const rect = getBrickRect(brick, rows, cols);
+  const color = getBrickColor(brick.maxHP);
+  spawnParticles(rect.x + rect.w / 2, rect.y + rect.h / 2, color, CFG.PARTICLE_COUNT);
+  S.score += brick.maxHP * 10;
+  const pu = spawnPowerup(rect.x + rect.w / 2, rect.y + rect.h / 2);
+  if (pu) S.powerups.push(pu);
+  S.bricks.splice(idx, 1);
+}
+
 function checkBallBrickCollision(ball) {
   const rows = S._brickRows || 0;
   const cols = S._brickCols || 0;
+  const isBig = !!S.powerupsActive.bigball;
   let hit = false;
 
   for (let i = S.bricks.length - 1; i >= 0; i--) {
@@ -1183,7 +1205,6 @@ function checkBallBrickCollision(ball) {
     if (dist < br) {
       const overlapX = br - Math.abs(dx);
       const overlapY = br - Math.abs(dy);
-
       if (overlapX < overlapY) {
         ball.vx = -ball.vx;
         ball.x += (dx > 0 ? overlapX : -overlapX);
@@ -1192,21 +1213,43 @@ function checkBallBrickCollision(ball) {
         ball.y += (dy > 0 ? overlapY : -overlapY);
       }
 
-      brick.hp--;
-      SFX.play('brick');
-      spawnParticles(closestX, closestY, getBrickColor(brick.maxHP), 3);
+      if (isBig) {
+        // Big ball: instantly destroy the hit brick
+        const hr = brick.row, hc = brick.col;
+        destroyBrickAtIndex(i);
 
-      if (brick.hp <= 0) {
-        const color = getBrickColor(brick.maxHP);
-        spawnParticles(rx + rw / 2, ry + rh / 2, color, CFG.PARTICLE_COUNT);
-        S.score += brick.maxHP * 10;
-
-        const pu = spawnPowerup(rx + rw / 2, ry + rh / 2);
-        if (pu) S.powerups.push(pu);
-
-        S.bricks.splice(i, 1);
+        // Chain to up to 2 adjacent (connected) bricks
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        let chained = 0;
+        for (const [dr, dc] of dirs) {
+          if (chained >= 2) break;
+          for (let j = S.bricks.length - 1; j >= 0; j--) {
+            const adj = S.bricks[j];
+            if (adj.row === hr + dr && adj.col === hc + dc) {
+              adj.hp--;
+              const adjRect = getBrickRect(adj, rows, cols);
+              spawnParticles(
+                adjRect.x + adjRect.w / 2, adjRect.y + adjRect.h / 2,
+                getBrickColor(adj.maxHP), 8
+              );
+              if (adj.hp <= 0) {
+                destroyBrickAtIndex(j);
+              }
+              chained++;
+              break;
+            }
+          }
+        }
+      } else {
+        // Normal: reduce HP by 1
+        brick.hp--;
+        spawnParticles(closestX, closestY, getBrickColor(brick.maxHP), 3);
+        if (brick.hp <= 0) {
+          destroyBrickAtIndex(i);
+        }
       }
 
+      SFX.play('brick');
       updateHUD();
       hit = true;
       break;
@@ -1314,6 +1357,9 @@ function updatePowerups(dt) {
         if (type.id === 'multishot') {
           S.extraBalls = [];
         }
+        if (type.id === 'bigball') {
+          setAllBallRadii(CFG.BALL_RADIUS);
+        }
         // extralife is permanent, no revert needed
       }
     }
@@ -1344,6 +1390,9 @@ function applyPowerup(id) {
       break;
     case 'multishot':
       spawnExtraBalls();
+      break;
+    case 'bigball':
+      setAllBallRadii(CFG.BALL_RADIUS * 2.5);
       break;
   }
   updateHUD();
