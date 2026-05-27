@@ -872,6 +872,7 @@ function updateHUD() {
   for (const type of POWERUP_TYPES) {
     const remaining = active[type.id];
     if (remaining && remaining > 0) {
+      if (type.id === 'extralife') continue; // permanent, no badge needed
       const secs = (remaining / 1000).toFixed(1);
       html += `<span class="pu-badge" style="border-color:${type.border};color:${type.color};text-shadow:0 0 6px ${type.color}60;">
         ${type.label} <span style="font-size:10px;opacity:0.7;">${secs}s</span>
